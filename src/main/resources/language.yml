@@ -2,6 +2,14 @@
 # Available custom gradient tags: <primary>, <secondary>, <success>, <danger>.
 messages:
   no-permission: "<danger>You do not have permission to do that.</danger>"
+  plugin-inactive: "<danger>WorldLoader is disabled. An administrator can enable it with <white>/wl enable</white>.</danger>"
+  plugin-enabled: "<success>WorldLoader has been enabled.</success>"
+  plugin-disabled: "<success>WorldLoader has been disabled. Unloaded <white><count></white> managed world(s).</success>"
+  plugin-already-enabled: "<secondary>WorldLoader is already enabled.</secondary>"
+  plugin-already-disabled: "<secondary>WorldLoader is already disabled.</secondary>"
+  plugin-disable-failed: "<danger>WorldLoader could not be disabled because at least one managed world could not be unloaded.</danger>"
+  plugin-state-save-failed: "<danger>The WorldLoader state could not be saved. The previous state has been restored.</danger>"
+  plugin-state-usage: "<danger>Use <white>/wl enable</white> or <white>/wl disable</white>.</danger>"
   initializing: "<secondary>WorldLoader is still loading its local storage.</secondary>"
   players-only: "<danger>This command can only be used by players.</danger>"
   invalid-name: "<danger>The name <white><name></white> is invalid. Letters, numbers, underscores and hyphens are allowed.</danger>"
@@ -58,4 +66,6 @@ messages:
     - "<gray>/wl import dimension </gray><white>name</white> <dark_gray>[air|flat|normal]</dark_gray>"
     - "<gray>/wl delete </gray><white>dimension:world</white>"
     - "<gray>/wl delete universum </gray><white>dimension</white>"
+    - "<gray>/wl enable</gray> <dark_gray>– Enable WorldLoader (requires worldloader.*)</dark_gray>"
+    - "<gray>/wl disable</gray> <dark_gray>– Disable WorldLoader (requires worldloader.*)</dark_gray>"
     - "<gray>/wl reload</gray>"

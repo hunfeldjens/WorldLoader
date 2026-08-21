@@ -14,17 +14,35 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 public final class WorldLoader extends JavaPlugin {
 
+    private final Object configurationWriteLock = new Object();
+    private final ExecutorService configurationExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        final Thread thread = new Thread(runnable, "WorldLoader-Config");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private CompletableFuture<Void> pendingConfigurationWrite = CompletableFuture.completedFuture(null);
+
     private PluginSettings settings;
     private Messages messages;
     private WorldManager worldManager;
+    private volatile boolean operational;
 
     @Override
     public void onEnable() {
@@ -32,6 +50,7 @@ public final class WorldLoader extends JavaPlugin {
         saveResource("language.yml", false);
         settings = PluginSettings.load(getConfig(), getLogger());
         messages = new Messages(getConfig(), loadLanguage());
+        operational = getConfig().getBoolean("plugin-state.enabled", true);
 
         final Path worldContainer = getServer().getWorldContainer().toPath().toAbsolutePath().normalize();
         final Path root = worldContainer.resolve(settings.worldRoot()).normalize();
@@ -74,9 +93,12 @@ public final class WorldLoader extends JavaPlugin {
             }
             Bukkit.getScheduler().runTask(this, () -> {
                 if (isEnabled()) {
-                    worldManager.startIdleTask();
+                    if (operational) {
+                        worldManager.startIdleTask();
+                    }
                     getLogger().info("WorldLoader " + getPluginMeta().getVersion()
-                            + " is ready. World directory: " + worldManager.root());
+                            + " is ready and " + (operational ? "enabled" : "disabled")
+                            + ". World directory: " + worldManager.root());
                 }
             });
         });
@@ -88,6 +110,15 @@ public final class WorldLoader extends JavaPlugin {
         Bukkit.getScheduler().cancelTasks(this);
         if (worldManager != null) {
             worldManager.stop();
+        }
+        configurationExecutor.shutdown();
+        try {
+            if (!configurationExecutor.awaitTermination(2L, TimeUnit.SECONDS)) {
+                configurationExecutor.shutdownNow();
+            }
+        } catch (final InterruptedException exception) {
+            configurationExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -101,6 +132,39 @@ public final class WorldLoader extends JavaPlugin {
         return messages;
     }
 
+    public boolean isOperational() {
+        return operational;
+    }
+
+    @NotNull
+    public CompletableFuture<Boolean> changeOperationalState(final boolean enabled) {
+        if (!Bukkit.isPrimaryThread()) {
+            throw new IllegalStateException("WorldLoader state change attempted outside the main thread");
+        }
+        final boolean previous = operational;
+        applyOperationalState(enabled);
+        getConfig().set("plugin-state.enabled", enabled);
+        final String serializedConfiguration = getConfig().saveToString();
+        final CompletableFuture<Boolean> result = new CompletableFuture<>();
+        queueConfigurationWrite(serializedConfiguration).whenComplete((ignored, throwable) -> {
+            if (!isEnabled()) {
+                result.complete(throwable == null);
+                return;
+            }
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (throwable != null) {
+                    getLogger().log(Level.SEVERE, "The WorldLoader state could not be saved to config.yml", throwable);
+                    getConfig().set("plugin-state.enabled", previous);
+                    applyOperationalState(previous);
+                    result.complete(false);
+                    return;
+                }
+                result.complete(true);
+            });
+        });
+        return result;
+    }
+
     public boolean reloadPluginSettings() {
         final String previousRoot = settings.worldRoot();
         final String previousStorageFile = settings.storageFile();
@@ -108,7 +172,51 @@ public final class WorldLoader extends JavaPlugin {
         settings = PluginSettings.load(getConfig(), getLogger());
         messages = new Messages(getConfig(), loadLanguage());
         worldManager.updateSettings(settings);
+        getConfig().set("plugin-state.enabled", operational);
+        if (operational) {
+            worldManager.startIdleTask();
+        } else {
+            worldManager.stopIdleTask();
+        }
         return previousRoot.equals(settings.worldRoot()) && previousStorageFile.equals(settings.storageFile());
+    }
+
+    private void applyOperationalState(final boolean enabled) {
+        operational = enabled;
+        if (worldManager == null) {
+            return;
+        }
+        if (enabled) {
+            worldManager.startIdleTask();
+        } else {
+            worldManager.stopIdleTask();
+        }
+    }
+
+    @NotNull
+    private CompletableFuture<Void> queueConfigurationWrite(@NotNull final String content) {
+        synchronized (configurationWriteLock) {
+            pendingConfigurationWrite = pendingConfigurationWrite.exceptionally(ignored -> null)
+                    .thenRunAsync(() -> writeConfiguration(content), configurationExecutor);
+            return pendingConfigurationWrite;
+        }
+    }
+
+    private void writeConfiguration(@NotNull final String content) {
+        final Path file = getDataFolder().toPath().resolve("config.yml");
+        final Path temporary = file.resolveSibling("config.yml.tmp");
+        try {
+            Files.createDirectories(file.getParent());
+            Files.writeString(temporary, content, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            try {
+                Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (final java.nio.file.AtomicMoveNotSupportedException exception) {
+                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (final IOException exception) {
+            throw new CompletionException(exception);
+        }
     }
 
     @NotNull

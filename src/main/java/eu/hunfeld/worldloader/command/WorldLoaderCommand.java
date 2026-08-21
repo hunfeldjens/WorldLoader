@@ -51,6 +51,14 @@ public final class WorldLoaderCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull final CommandSender sender, @NotNull final Command command,
                              @NotNull final String label, final String @NotNull [] args) {
+        if (args.length > 0 && (args[0].equalsIgnoreCase("enable") || args[0].equalsIgnoreCase("disable"))) {
+            handleOperationalState(sender, args);
+            return true;
+        }
+        if (!plugin.isOperational()) {
+            plugin.messages().send(sender, "plugin-inactive");
+            return true;
+        }
         if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
             plugin.messages().sendHelp(sender);
             return true;
@@ -73,6 +81,46 @@ public final class WorldLoaderCommand implements CommandExecutor, TabCompleter {
             default -> plugin.messages().sendHelp(sender);
         }
         return true;
+    }
+
+    private void handleOperationalState(final CommandSender sender, final String[] args) {
+        if (rejectMissingPermission(sender, "worldloader.*")) {
+            return;
+        }
+        if (args.length != 1) {
+            plugin.messages().send(sender, "plugin-state-usage");
+            return;
+        }
+        final boolean enable = args[0].equalsIgnoreCase("enable");
+        if (plugin.isOperational() == enable) {
+            plugin.messages().send(sender, enable ? "plugin-already-enabled" : "plugin-already-disabled");
+            return;
+        }
+        int unloadedWorlds = 0;
+        if (!enable) {
+            if (manager.isInitializing()) {
+                plugin.messages().send(sender, "initializing");
+                return;
+            }
+            final WorldManager.Result unloadResult = manager.unloadAllLoadedWorlds();
+            if (unloadResult.status() != WorldManager.Status.SUCCESS) {
+                plugin.messages().send(sender, "plugin-disable-failed");
+                return;
+            }
+            unloadedWorlds = unloadResult.count();
+            confirmations.clear();
+        }
+        final int unloadedCount = unloadedWorlds;
+        plugin.changeOperationalState(enable).thenAccept(saved -> {
+            if (!saved) {
+                plugin.messages().send(sender, "plugin-state-save-failed");
+            } else if (enable) {
+                plugin.messages().send(sender, "plugin-enabled");
+            } else {
+                plugin.messages().send(sender, "plugin-disabled",
+                        plugin.messages().text("count", unloadedCount));
+            }
+        });
     }
 
     private void handleCreate(final CommandSender sender, final String[] args) {
@@ -517,7 +565,17 @@ public final class WorldLoaderCommand implements CommandExecutor, TabCompleter {
     public @NotNull List<String> onTabComplete(@NotNull final CommandSender sender, @NotNull final Command command,
                                                 @NotNull final String alias, final String @NotNull [] args) {
         if (args.length == 1) {
-            return matching(args[0], ROOT_ARGUMENTS);
+            final List<String> roots = new ArrayList<>();
+            if (plugin.isOperational()) {
+                roots.addAll(ROOT_ARGUMENTS);
+            }
+            if (sender.hasPermission("worldloader.*")) {
+                roots.add(plugin.isOperational() ? "disable" : "enable");
+            }
+            return matching(args[0], roots);
+        }
+        if (!plugin.isOperational()) {
+            return List.of();
         }
         if (manager.isInitializing()) {
             return List.of();

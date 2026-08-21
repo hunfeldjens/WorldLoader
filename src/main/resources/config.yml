@@ -1,4 +1,8 @@
-# WorldLoader 1.0.5 - Paper 26.2
+# WorldLoader 1.0.7 - Paper 26.2
+plugin-state:
+  # Persisted by /wl enable and /wl disable. Manual changes take effect after a restart.
+  enabled: true
+
 storage:
   # Relative to the server directory. The path must remain inside the world container.
   world-root: "world/dimensions"

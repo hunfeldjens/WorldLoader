@@ -129,18 +129,21 @@ public final class WorldManager {
 
     public void updateSettings(@NotNull final PluginSettings settings) {
         this.settings = settings;
-        restartIdleTask();
     }
 
     public void startIdleTask() {
         restartIdleTask();
     }
 
-    public void stop() {
+    public void stopIdleTask() {
         if (idleTask != null) {
             idleTask.cancel();
             idleTask = null;
         }
+    }
+
+    public void stop() {
+        stopIdleTask();
         storage.close();
     }
 
@@ -442,7 +445,7 @@ public final class WorldManager {
         if (!deleting.add(managed.lookupKey())) {
             return CompletableFuture.completedFuture(Result.of(Status.FAILED, managed));
         }
-        if (!evacuateAndUnload(List.of(managed))) {
+        if (!evacuateAndUnload(List.of(managed), false)) {
             deleting.remove(managed.lookupKey());
             return CompletableFuture.completedFuture(Result.of(Status.IN_USE, managed));
         }
@@ -490,7 +493,7 @@ public final class WorldManager {
                 removeDeleting(keys);
                 return CompletableFuture.completedFuture(Result.of(Status.BLOCKED, blocked.get()));
             }
-            return onMain(() -> evacuateAndUnload(contained)
+            return onMain(() -> evacuateAndUnload(contained, false)
                     ? Result.of(Status.SUCCESS, dimension)
                     : Result.of(Status.IN_USE, dimension));
         }).thenCompose(preparation -> {
@@ -524,6 +527,20 @@ public final class WorldManager {
     @NotNull
     public Optional<String> actualDimension(@NotNull final String requested) {
         return Optional.ofNullable(dimensions.get(lower(requested)));
+    }
+
+    @NotNull
+    public Result unloadAllLoadedWorlds() {
+        requirePrimaryThread();
+        final List<ManagedWorld> loadedWorlds = loadedByPlugin.stream()
+                .map(worlds::get)
+                .filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparing(ManagedWorld::id, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+        if (!evacuateAndUnload(loadedWorlds, true)) {
+            return new Result(Status.FAILED, "worldloader", null, 0);
+        }
+        return new Result(Status.SUCCESS, "worldloader", null, loadedWorlds.size());
     }
 
     private World createBukkitWorld(final ManagedWorld managed, final boolean newWorld) {
@@ -574,7 +591,7 @@ public final class WorldManager {
         world.setSpawnLocation(0, y + 1, 0);
     }
 
-    private boolean evacuateAndUnload(final Collection<ManagedWorld> managedWorlds) {
+    private boolean evacuateAndUnload(final Collection<ManagedWorld> managedWorlds, final boolean forceEvacuation) {
         final World primary = Bukkit.getWorlds().stream()
                 .filter(world -> byBukkitWorld(world) == null)
                 .findFirst()
@@ -585,7 +602,7 @@ public final class WorldManager {
                 continue;
             }
             if (!world.getPlayers().isEmpty()) {
-                if (!settings.evacuateBeforeDelete() || primary == null || primary.equals(world)) {
+                if ((!forceEvacuation && !settings.evacuateBeforeDelete()) || primary == null || primary.equals(world)) {
                     return false;
                 }
                 final Location fallback = primary.getSpawnLocation();
