@@ -1,0 +1,58 @@
+# WorldLoader 1.0.4 - Paper 26.2
+storage:
+  # Relative to the server directory. The path must remain inside the world container.
+  world-root: "world/dimensions"
+  file: "storage.json"
+
+auto-unload:
+  enabled: true
+  idle-minutes: 5
+  check-interval-seconds: 30
+  save-before-unload: true
+
+creation:
+  generate-structures: true
+  air-spawn-platform:
+    enabled: true
+    y: 64
+    radius: 2
+    material: GLASS
+  gamerules:
+    random-tick-speed: 0
+    fire-spread: false
+    mob-spawning: false
+    daylight-cycle: false
+    weather-cycle: false
+
+teleport:
+  # Finds the highest safe spawn block in non-air worlds.
+  use-safe-spawn: true
+  center-on-block: true
+
+import:
+  require-level-dat: true
+  default-world-type: normal
+
+delete:
+  confirmation-seconds: 30
+  teleport-players-to-primary-world: true
+
+list:
+  worlds-per-page: 8
+
+blacklist:
+  # All blacklist comparisons are case-insensitive.
+  # Blocking a dimension automatically blocks every world inside it.
+  dimensions:
+    - minecraft
+    - projekt
+    - privat
+  # Accepts "world" globally or "dimension:world" for an exact match.
+  worlds: []
+
+format:
+  prefix: "<gradient:#23D5FF:#8B5CF6><bold>WorldLoader</bold></gradient> <dark_gray>»</dark_gray>"
+  primary-gradient: "<gradient:#23D5FF:#8B5CF6>"
+  secondary-gradient: "<gradient:#8B5CF6:#EC4899>"
+  success-gradient: "<gradient:#34D399:#22C55E>"
+  danger-gradient: "<gradient:#FB7185:#EF4444>"

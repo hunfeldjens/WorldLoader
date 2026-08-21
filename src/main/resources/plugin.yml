@@ -1,0 +1,75 @@
+name: WorldLoader
+description: Manages dimension worlds with lazy loading and automatic unloading.
+prefix: WorldLoader
+version: '${project.version}'
+main: eu.hunfeld.worldloader.WorldLoader
+api-version: '26.2'
+load: STARTUP
+authors: [ Lehrling ]
+website: https://www.hunfeld.eu
+
+commands:
+  worldloader:
+    description: Manages dimensions and worlds.
+    usage: /worldloader help
+    aliases: [ wloader, wl ]
+
+permissions:
+  worldloader.*:
+    description: Grants every WorldLoader permission.
+    default: op
+    children:
+      worldloader.use: true
+      worldloader.list: true
+      worldloader.create.world: true
+      worldloader.create.dimension: true
+      worldloader.load.world: true
+      worldloader.unload.world: true
+      worldloader.unload.dimension: true
+      worldloader.import: true
+      worldloader.teleport: true
+      worldloader.delete.world: true
+      worldloader.delete.dimension: true
+      worldloader.reload: true
+  worldloader.use:
+    description: Allows access to WorldLoader help.
+    default: true
+  worldloader.list:
+    description: Allows listing managed dimensions and worlds.
+    default: false
+  worldloader.teleport:
+    description: Allows teleporting to managed worlds.
+    default: false
+  worldloader.teleprot:
+    description: Compatibility alias for the misspelled teleport permission.
+    default: false
+  worldloader.create.world:
+    description: Allows creating worlds.
+    default: false
+  worldloader.create.dimension:
+    description: Allows creating dimensions.
+    default: false
+  worldloader.load.world:
+    description: Allows loading worlds.
+    default: false
+  worldloader.unload.world:
+    description: Allows unloading individual worlds.
+    default: false
+  worldloader.unload.dimension:
+    description: Allows unloading every world in a dimension.
+    default: false
+  worldloader.import:
+    description: Allows importing copied dimensions.
+    default: false
+  worldloader.delete.world:
+    description: Allows permanently deleting worlds.
+    default: false
+  worldloader.delete.dimension:
+    description: Allows permanently deleting dimensions.
+    default: false
+  worldloader.delete.dimesnion:
+    description: Compatibility alias for the misspelled dimension-delete permission.
+    default: false
+  worldloader.reload:
+    description: Allows reloading the configuration.
+    default: false
