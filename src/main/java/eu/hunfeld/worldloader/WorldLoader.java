@@ -48,7 +48,7 @@ public final class WorldLoader extends JavaPlugin {
             return;
         }
         final WorldStorage storage = new WorldStorage(storageFile, getLogger());
-        worldManager = new WorldManager(this, storage, settings, worldContainer, root);
+        worldManager = new WorldManager(this, storage, settings, root);
 
         final PluginCommand command = getCommand("worldloader");
         if (command == null) {

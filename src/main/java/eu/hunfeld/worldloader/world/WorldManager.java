@@ -9,6 +9,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
@@ -17,7 +18,6 @@ import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Comparator;
@@ -72,11 +72,10 @@ public final class WorldManager {
 
     private final WorldLoader plugin;
     private final WorldStorage storage;
-    private final Path worldContainer;
     private final Path root;
     private final Map<String, String> dimensions = new ConcurrentHashMap<>();
     private final Map<String, ManagedWorld> worlds = new ConcurrentHashMap<>();
-    private final Map<String, ManagedWorld> worldsByBukkitName = new ConcurrentHashMap<>();
+    private final Map<NamespacedKey, ManagedWorld> worldsByPaperKey = new ConcurrentHashMap<>();
     private final Map<String, String> diskDimensions = new ConcurrentHashMap<>();
     private final Map<String, Map<String, String>> diskWorlds = new ConcurrentHashMap<>();
     private final Map<String, Long> lastEmptySince = new HashMap<>();
@@ -88,12 +87,10 @@ public final class WorldManager {
     private BukkitTask idleTask;
 
     public WorldManager(@NotNull final WorldLoader plugin, @NotNull final WorldStorage storage,
-                        @NotNull final PluginSettings settings, @NotNull final Path worldContainer,
-                        @NotNull final Path root) {
+                        @NotNull final PluginSettings settings, @NotNull final Path root) {
         this.plugin = plugin;
         this.storage = storage;
         this.settings = settings;
-        this.worldContainer = worldContainer;
         this.root = root;
     }
 
@@ -112,7 +109,7 @@ public final class WorldManager {
                 }
                 dimensions.putIfAbsent(lower(world.dimension()), world.dimension());
                 worlds.putIfAbsent(world.lookupKey(), world);
-                worldsByBukkitName.putIfAbsent(internalWorldName(world), world);
+                worldsByPaperKey.putIfAbsent(paperKey(world), world);
             }
             diskDimensions.putAll(disk.dimensions());
             disk.worlds().forEach((dimension, names) -> diskWorlds.put(dimension, new ConcurrentHashMap<>(names)));
@@ -204,7 +201,7 @@ public final class WorldManager {
             diskDimensions.put(lookup, requestedName);
             diskWorlds.put(lookup, new ConcurrentHashMap<>());
         }
-        return storage.createDirectory(root.resolve(requestedName)).handle((ignored, throwable) -> {
+        return storage.createDirectory(dimensionPath(requestedName)).handle((ignored, throwable) -> {
             if (throwable != null) {
                 dimensions.remove(lookup, requestedName);
                 diskDimensions.remove(lookup, requestedName);
@@ -238,7 +235,7 @@ public final class WorldManager {
         }
         applyCreationDefaults(world, type);
         worlds.put(managed.lookupKey(), managed);
-        worldsByBukkitName.put(internalWorldName(managed), managed);
+        worldsByPaperKey.put(paperKey(managed), managed);
         diskWorlds.computeIfAbsent(lower(dimension), ignored -> new ConcurrentHashMap<>())
                 .put(worldLookup, requestedWorld);
         loadedByPlugin.add(managed.lookupKey());
@@ -420,7 +417,7 @@ public final class WorldManager {
                         }
                         final ManagedWorld managed = new ManagedWorld(actualDimension, name, type);
                         if (worlds.putIfAbsent(managed.lookupKey(), managed) == null) {
-                            worldsByBukkitName.put(internalWorldName(managed), managed);
+                            worldsByPaperKey.put(paperKey(managed), managed);
                             imported++;
                         }
                     }
@@ -456,7 +453,7 @@ public final class WorldManager {
                 return Result.of(Status.FAILED, managed);
             }
             worlds.remove(managed.lookupKey(), managed);
-            worldsByBukkitName.remove(internalWorldName(managed), managed);
+            worldsByPaperKey.remove(paperKey(managed), managed);
             final Map<String, String> names = diskWorlds.get(lower(managed.dimension()));
             if (names != null) {
                 names.remove(lower(managed.name()));
@@ -501,7 +498,7 @@ public final class WorldManager {
                 removeDeleting(keys);
                 return CompletableFuture.completedFuture(preparation);
             }
-            return storage.deleteDirectory(root, root.resolve(dimension)).handle((ignored, throwable) -> {
+            return storage.deleteDirectory(root, dimensionPath(dimension)).handle((ignored, throwable) -> {
                 removeDeleting(keys);
                 if (throwable != null) {
                     storage.logFailure(throwable);
@@ -509,7 +506,7 @@ public final class WorldManager {
                 }
                 contained.forEach(world -> {
                     worlds.remove(world.lookupKey(), world);
-                    worldsByBukkitName.remove(internalWorldName(world), world);
+                    worldsByPaperKey.remove(paperKey(world), world);
                 });
                 dimensions.remove(lower(dimension), dimension);
                 diskDimensions.remove(lower(dimension));
@@ -531,7 +528,7 @@ public final class WorldManager {
 
     private World createBukkitWorld(final ManagedWorld managed, final boolean newWorld) {
         try {
-            final WorldCreator creator = new WorldCreator(internalWorldName(managed))
+            final WorldCreator creator = WorldCreator.ofKey(paperKey(managed))
                     .environment(World.Environment.NORMAL)
                     .generateStructures(settings.generateStructures());
             switch (managed.type()) {
@@ -658,19 +655,23 @@ public final class WorldManager {
     }
 
     private ManagedWorld byBukkitWorld(final World world) {
-        return worldsByBukkitName.get(world.getName());
+        return worldsByPaperKey.get(world.getKey());
     }
 
     private World getBukkitWorld(final ManagedWorld managed) {
-        return Bukkit.getWorld(internalWorldName(managed));
+        return Bukkit.getWorld(paperKey(managed));
     }
 
     private Path worldPath(final ManagedWorld managed) {
-        return root.resolve(managed.dimension()).resolve(managed.name()).normalize();
+        return dimensionPath(managed.dimension()).resolve(lower(managed.name())).normalize();
     }
 
-    private String internalWorldName(final ManagedWorld managed) {
-        return worldContainer.relativize(worldPath(managed)).toString().replace(File.separatorChar, '/');
+    private Path dimensionPath(final String dimension) {
+        return root.resolve(lower(dimension)).normalize();
+    }
+
+    private NamespacedKey paperKey(final ManagedWorld managed) {
+        return new NamespacedKey(lower(managed.dimension()), lower(managed.name()));
     }
 
     private String dimensionCollision(final String lookup) {

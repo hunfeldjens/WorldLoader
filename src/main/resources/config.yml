@@ -1,4 +1,4 @@
-# WorldLoader 1.0.4 - Paper 26.2
+# WorldLoader 1.0.5 - Paper 26.2
 storage:
   # Relative to the server directory. The path must remain inside the world container.
   world-root: "world/dimensions"
