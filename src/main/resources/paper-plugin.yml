@@ -1,0 +1,13 @@
+name: WorldLoader
+description: $description
+prefix: WorldLoader
+version: '${version}'
+
+main: eu.hunfeld.worldLoader.WorldLoader
+bootstrapper: eu.hunfeld.worldLoader.WorldLoaderBootstrap
+loader: eu.hunfeld.worldLoader.WorldLoaderLoader
+api-version: '26.2'
+load: STARTUP
+
+authors: [ Lehrling ]
+website: https://www.hunfeld.eu
